@@ -114,40 +114,37 @@ async def webhook(req: Request):
         return {"ok": True}
 
     chat_id = msg["chat"]["id"]
-    text = msg["text"]
+    text = msg["text"].strip()
 
-    # /start
+    # /start command
     if text == "/start":
         send_message(
             chat_id,
             "👋 <b>Welcome to Music Bot</b>\n\n"
-            "🎧 গান খুঁজতে লিখুন:\n"
-            "<code>/song song name</code>\n\n"
-            "📌 Example:\n"
-            "<code>/song arijit tum hi ho</code>\n\n"
-            "⬇️ নিচের list থেকে গান বেছে নিন,\n"
-            "▶️ Telegram-এই play করুন বা download করুন"
+            "🎧 শুধু গান নাম লিখুন:\n"
+            "<i>tum hi ho</i>\n\n"
+            "⬇️ গান list থেকে বেছে নিন\n"
+            "▶️ Telegram-এই play / download করুন"
         )
         return {"ok": True}
 
-    # /song search
-    if text.startswith("/song"):
-        query = text.replace("/song", "").strip()
-        if not query:
-            send_message(chat_id, "❌ Example:\n<code>/song tum hi ho</code>")
-            return {"ok": True}
+    # ignore other commands
+    if text.startswith("/"):
+        send_message(chat_id, "❌ শুধু গান নাম লিখুন (no command needed)")
+        return {"ok": True}
 
-        songs = search_songs(query)
-        if not songs:
-            send_message(chat_id, "😔 কোনো গান পাওয়া যায়নি")
-            return {"ok": True}
+    # 🎵 AUTO SEARCH (MAIN FEATURE)
+    songs = search_songs(text)
+    if not songs:
+        send_message(chat_id, "😔 কোনো গান পাওয়া যায়নি")
+        return {"ok": True}
 
-        USER_CACHE[chat_id] = songs
+    USER_CACHE[chat_id] = songs
 
-        reply = "🎵 <b>Search results:</b>\n\n"
-        for i, s in enumerate(songs):
-            reply += f"{i+1}. <b>{s['title']}</b>\n🎤 {s['artist']}\n\n"
+    reply = "🎵 <b>Search results:</b>\n\n"
+    for i, s in enumerate(songs):
+        reply += f"{i+1}. <b>{s['title']}</b>\n🎤 {s['artist']}\n\n"
 
-        send_message(chat_id, reply, build_song_buttons(songs))
+    send_message(chat_id, reply, build_song_buttons(songs))
 
     return {"ok": True}
