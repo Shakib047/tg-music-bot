@@ -1,19 +1,24 @@
 import os
 import requests
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
+# ============ CONFIG ============
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 SAAVN_API = "https://jiosavan-api2.vercel.app/api/search/songs"
 
-# cache: {chat_id: [song1, song2, ...]}
-USER_CACHE = {}
+ADMIN_ID = 6607731077  # sakib sir admin ID
 
-# ================= HELPERS =================
+# ============ STORAGE ============
+USER_CACHE = {}        # {chat_id: [songs]}
+USER_SET = set()       # unique users
+TOTAL_SEARCH = 0       # total searches
+# ================================
 
+
+# ============ HELPERS ============
 def send_message(chat_id, text, reply_markup=None):
     payload = {
         "chat_id": chat_id,
@@ -69,7 +74,7 @@ def search_songs(query):
     return results
 
 
-def build_song_buttons(songs):
+def build_buttons(songs):
     keyboard = []
     for i, s in enumerate(songs):
         keyboard.append([
@@ -79,8 +84,8 @@ def build_song_buttons(songs):
             }
         ])
     return {"inline_keyboard": keyboard}
+# ================================
 
-# ================= ROUTES =================
 
 @app.get("/")
 async def root():
@@ -89,6 +94,7 @@ async def root():
 
 @app.post("/webhook")
 async def webhook(req: Request):
+    global TOTAL_SEARCH
     update = await req.json()
 
     # ---------- BUTTON CLICK ----------
@@ -116,15 +122,32 @@ async def webhook(req: Request):
     chat_id = msg["chat"]["id"]
     text = msg["text"].strip()
 
-    # /start command
+    # register user
+    USER_SET.add(chat_id)
+
+    # /start
     if text == "/start":
         send_message(
             chat_id,
             "👋 <b>Welcome to Music Bot</b>\n\n"
-            "🎧 শুধু গান নাম লিখুন:\n"
+            "🎧 <b>যেকোনো গান নাম লিখুন</b>\n"
             "<i>tum hi ho</i>\n\n"
-            "⬇️ গান list থেকে বেছে নিন\n"
-            "▶️ Telegram-এই play / download করুন"
+            "⬇️ নিচের list থেকে গান বেছে নিন\n"
+            "▶️ Telegram-এই play করুন বা download করুন"
+        )
+        return {"ok": True}
+
+    # /stats (ADMIN ONLY)
+    if text == "/stats":
+        if chat_id != ADMIN_ID:
+            send_message(chat_id, "❌ You are not allowed to use this command")
+            return {"ok": True}
+
+        send_message(
+            chat_id,
+            f"📊 <b>Bot Statistics</b>\n\n"
+            f"👥 Total Users: <b>{len(USER_SET)}</b>\n"
+            f"🎧 Total Searches: <b>{TOTAL_SEARCH}</b>"
         )
         return {"ok": True}
 
@@ -133,7 +156,9 @@ async def webhook(req: Request):
         send_message(chat_id, "❌ শুধু গান নাম লিখুন (no command needed)")
         return {"ok": True}
 
-    # 🎵 AUTO SEARCH (MAIN FEATURE)
+    # ---------- AUTO SONG SEARCH ----------
+    TOTAL_SEARCH += 1
+
     songs = search_songs(text)
     if not songs:
         send_message(chat_id, "😔 কোনো গান পাওয়া যায়নি")
@@ -141,10 +166,9 @@ async def webhook(req: Request):
 
     USER_CACHE[chat_id] = songs
 
-    reply = "🎵 <b>Search results:</b>\n\n"
+    reply = "🎵 <b>Search Results:</b>\n\n"
     for i, s in enumerate(songs):
         reply += f"{i+1}. <b>{s['title']}</b>\n🎤 {s['artist']}\n\n"
 
-    send_message(chat_id, reply, build_song_buttons(songs))
-
+    send_message(chat_id, reply, build_buttons(songs))
     return {"ok": True}
